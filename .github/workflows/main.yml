@@ -1,37 +1,39 @@
-name: Windows RDP via Bore
+name: Linux VPS via Bore
 
 on: [push]
 
 jobs:
-  rdp-setup:
-    runs-on: windows-latest
-    timeout-minutes: 360 # الحد الأقصى 6 ساعات
+  vps-setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # أقصى حد للتشغيل المستمر هو 6 ساعات
 
     steps:
-      - name: Enable RDP and Firewall
+      - name: Configure SSH and Root User
         run: |
-          Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
-          Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          New-NetFirewallRule -DisplayName "Allow RDP via Bore" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389
-
-      - name: Create Admin User
-        run: |
-          net user kamel007 Kamel@123 /add
-          net localgroup administrators kamel007 /add
+          # تعيين كلمة مرور قوية للمستخدم root
+          echo "root:Root@123" | sudo chpasswd
+          
+          # إعداد السيرفر للسماح بدخول الـ root عبر كلمة المرور
+          echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config
+          echo "PasswordAuthentication yes" | sudo tee -a /etc/ssh/sshd_config
+          
+          # إعادة تشغيل خدمة الـ SSH لتطبيق التغييرات
+          sudo systemctl restart ssh
 
       - name: Download and Extract Bore
         run: |
-          Invoke-WebRequest "https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-pc-windows-msvc.zip" -OutFile bore.zip
-          Expand-Archive bore.zip -DestinationPath .
-          Remove-Item bore.zip
+          # تحميل أداة Bore الخاصة بنظام لينكس
+          wget https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xf bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
+          chmod +x bore
 
       - name: Start Bore Tunnel
         run: |
-          Write-Output "===================================================="
-          Write-Output "الرجاء الانتظار لثوانٍ ورؤية الرابط الحي في السطور أدناه"
-          Write-Output "اسم المستخدم: kamel007"
-          Write-Output "كلمة المرور: Kamel@123"
-          Write-Output "===================================================="
+          echo "===================================================="
+          echo "انتظر ثوانٍ ليظهر رقم المنفذ (Port) الخاص بـ SSH أدناه"
+          echo "اسم المستخدم: root"
+          echo "كلمة المرور: Root@123"
+          echo "===================================================="
           
-          # تشغيل الأداة مباشرة في الواجهة للحفاظ على استمرار الجلسة وعرض الرابط تلقائياً
-          .\bore.exe local 3389 --to bore.pub
+          # تشغيل النفق وتوجيه منفذ الـ SSH الافتراضي (22)
+          ./bore local 22 --to bore.pub
