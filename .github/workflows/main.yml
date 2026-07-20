@@ -1,24 +1,38 @@
-name: Debian Linux VPS via Bore
+name: Linux VPS via Bore
 
 on: [push]
 
 jobs:
   vps-setup:
+    # لتغيير الخادم إلى سيرفر خارق مجاني/مدفوع:
+    # 1. افتراضي مجاني: ubuntu-latest (2 Cores / 7GB RAM)
+    # 2. خطط المنظمات المدفوعة: ubuntu-latest-16-core أو ubuntu-latest-64-core
+    # 3. سيرفرك الخاص: self-hosted
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
     steps:
-      - name: Launch Debian Linux System
+      - name: Maximize Server Resources & Swap
         run: |
-          # تشغيل نظام دبيان (Debian 12) مستقل وتجهيز الـ SSH والبايثون
-          docker run -d --name debian-vps --net=host debian:latest bash -c "
-            apt update && apt install -y openssh-server sudo wget curl python3 python3-pip &&
-            echo 'root:Root@123' | chpasswd &&
-            mkdir -p /var/run/sshd &&
-            echo 'PermitRootLogin yes' >> /etc/ssh/sshd_config &&
-            echo 'PasswordAuthentication yes' >> /etc/ssh/sshd_config &&
-            /usr/sbin/sshd -D
-          "
+          # زيادة حجم الذاكرة الافتراضية (Swap) لزيادة ثبات النظام
+          sudo swapoff -a
+          sudo fallocate -l 8G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          echo "تمت زيادة الذاكرة الافتراضية بنجاح!"
+
+      - name: Configure SSH and Root User
+        run: |
+          # تعيين كلمة مرور قوية للمستخدم root
+          echo "root:Root@123" | sudo chpasswd
+          
+          # إعداد السيرفر للسماح بدخول الـ root عبر كلمة المرور
+          echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config
+          echo "PasswordAuthentication yes" | sudo tee -a /etc/ssh/sshd_config
+          
+          # إعادة تشغيل خدمة الـ SSH لتطبيق التغييرات
+          sudo systemctl restart ssh
 
       - name: Download and Extract Bore
         run: |
@@ -29,7 +43,6 @@ jobs:
       - name: Start Bore Tunnel
         run: |
           echo "===================================================="
-          echo "سيرفر Debian 12 جاهز للاتصال!"
           echo "اسم المستخدم: root"
           echo "كلمة المرور: Root@123"
           echo "===================================================="
