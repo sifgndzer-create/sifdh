@@ -1,50 +1,38 @@
 name: Linux VPS via Bore
 
-on: [push]
+on:
+  workflow_dispatch: # 👈 يسمح للتشغيل أوتوماتيكياً عبر البايثون
+  push:
+    branches: [ "main" ]
 
 jobs:
   vps-setup:
-    # لتغيير الخادم إلى سيرفر خارق مجاني/مدفوع:
-    # 1. افتراضي مجاني: ubuntu-latest (2 Cores / 7GB RAM)
-    # 2. خطط المنظمات المدفوعة: ubuntu-latest-16-core أو ubuntu-latest-64-core
-    # 3. سيرفرك الخاص: self-hosted
     runs-on: ubuntu-latest
-    timeout-minutes: 360
-
     steps:
       - name: Maximize Server Resources & Swap
         run: |
-          # زيادة حجم الذاكرة الافتراضية (Swap) لزيادة ثبات النظام
-          sudo swapoff -a
-          sudo fallocate -l 8G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          echo "تمت زيادة الذاكرة الافتراضية بنجاح!"
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
 
       - name: Configure SSH and Root User
         run: |
-          # تعيين كلمة مرور قوية للمستخدم root
-          echo "root:Root@123" | sudo chpasswd
-          
-          # إعداد السيرفر للسماح بدخول الـ root عبر كلمة المرور
-          echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config
-          echo "PasswordAuthentication yes" | sudo tee -a /etc/ssh/sshd_config
-          
-          # إعادة تشغيل خدمة الـ SSH لتطبيق التغييرات
-          sudo systemctl restart ssh
+          sudo echo "root:Root@123" | sudo chpasswd
+          sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
+          sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
+          sudo service ssh restart
+          echo "=================================================="
+          echo "اسم المستخدم : root"
+          echo "كلمة السر    : Root@123"
+          echo "=================================================="
 
       - name: Download and Extract Bore
         run: |
-          wget https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
-          tar -xf bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
-          chmod +x bore
+          wget -q https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+          tar -xf bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
+          sudo mv bore /usr/local/bin/
 
       - name: Start Bore Tunnel
         run: |
-          echo "===================================================="
-          echo "اسم المستخدم: root"
-          echo "كلمة المرور: Root@123"
-          echo "===================================================="
-          
-          ./bore local 22 --to bore.pub
+          echo "=================================================="
+          bore local 22 --to bore.pub
