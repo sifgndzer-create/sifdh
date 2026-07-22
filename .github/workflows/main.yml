@@ -35,55 +35,19 @@ jobs:
           sudo sed -i 's/ENABLED=0/ENABLED=1/' /etc/default/stunnel4
           sudo service stunnel4 restart
 
-      - name: Setup WebSocket Proxy on Ports 80 & 8080
+      - name: Start Cloudflare Tunnel (Static Host)
         run: |
-          cat << 'EOF' > /tmp/ws_proxy.py
-          import socket, threading
-          def handle(client):
-              try:
-                  req = client.recv(4096).decode('utf-8', errors='ignore')
-                  if "HTTP" in req:
-                      client.send(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
-                  ssh = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                  ssh.connect(('127.0.0.1', 22))
-                  def fw(s, d):
-                      try:
-                          while True:
-                              b = s.recv(4096)
-                              if not b: break
-                              d.send(b)
-                      except: pass
-                      s.close(); d.close()
-                  threading.Thread(target=fw, args=(client, ssh)).start()
-                  threading.Thread(target=fw, args=(ssh, client)).start()
-              except:
-                  client.close()
-          def start_server(port):
-              server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-              server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-              server.bind(('0.0.0.0', port))
-              server.listen(100)
-              while True:
-                  c, addr = server.accept()
-                  threading.Thread(target=handle, args=(c,)).start()
-          threading.Thread(target=start_server, args=(80,)).start()
-          threading.Thread(target=start_server, args=(8080,)).start()
-          EOF
-          sudo nohup python3 /tmp/ws_proxy.py >/dev/null 2>&1 &
-
-      - name: Start Static VPN Tunnel (Localtunnel)
-        run: |
-          sudo apt-get install -y npm
-          sudo npm install -g localtunnel
+          wget -q https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
+          sudo dpkg -i cloudflared-linux-amd64.deb
           
           echo "=================================================="
-          # استخدام النطاق الثابت الخاص بالسيرفر
-          lt --port 80 --subdomain vps-sifodz > /tmp/lt.log 2>&1 &
+          # تشغيل نفق سحابي مستقر وموجه مباشرة للبورت 443 (SSL) و 22
+          cloudflared tunnel --url http://127.0.0.1:443 --logfile /tmp/cf.log &
           sleep 10
-          STATIC_DOMAIN="vps-sifodz.loca.lt"
+          CF_URL=$(grep -o 'https://[-0-9a-zA-Z]*\.trycloudflare\.com' /tmp/cf.log | head -1)
+          CF_DOMAIN=$(echo $CF_URL | sed 's/https:\/\///')
           
-          echo "Host (SNI/Payload): $STATIC_DOMAIN"
+          echo "Host (SNI/Payload): $CF_DOMAIN"
           echo "=================================================="
           
-          # إبقاء السيرفر يعمل بشكل مستمر
           while true; do sleep 60; done
