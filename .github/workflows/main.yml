@@ -37,8 +37,8 @@ jobs:
         run: |
           Write-Output "===================================================="
           Write-Output "انتظر ثوانٍ ليتغير رقم المنفذ (Port) أدناه واستخدمه فوراً"
-          Write-Output "Username: sifom4"
-          Write-Output "Password: sifodz02"
+          Write-Output "Username: kamel007"
+          Write-Output "Password: Kamel@123"
           Write-Output "===================================================="
           
           .\bore.exe local 3389 --to bore.pub
