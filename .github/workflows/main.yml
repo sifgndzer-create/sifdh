@@ -20,8 +20,8 @@ jobs:
 
       - name: Start Pinggy TCP Tunnel
         run: |
-          # تشغيل النفق عبر SSH المدمج في ويندوز
-          Start-Process -FilePath "ssh" -ArgumentList "-o StrictHostKeyChecking=no -p 443 -R 0:localhost:3389 a.pinggy.io" -NoNewWindow -RedirectStandardOutput pinggy.log
+          # إضافة -T لمنع مشكلة Terminal والتوافق مع GitHub Actions
+          Start-Process -FilePath "ssh" -ArgumentList "-o StrictHostKeyChecking=no -T -p 443 -R 0:localhost:3389 a.pinggy.io" -NoNewWindow -RedirectStandardOutput pinggy.log
           
           # انتظار واستخراج رابط المنفذ الحقيقي
           $tunnelUrl = $null
