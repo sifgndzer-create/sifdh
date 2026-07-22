@@ -1,7 +1,7 @@
-name: Linux VPS via Bore
+name: GitHub Static VPN Server (VPS-SIFODZ)
 
 on:
-  workflow_dispatch: # 👈 يسمح للتشغيل أوتوماتيكياً عبر البايثون
+  workflow_dispatch:
   push:
     branches: [ "main" ]
 
@@ -21,18 +21,69 @@ jobs:
           sudo sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config
           sudo sed -i 's/PasswordAuthentication no/PasswordAuthentication yes/' /etc/ssh/sshd_config
           sudo service ssh restart
-          echo "=================================================="
-          echo "اسم المستخدم : root"
-          echo "كلمة السر    : Root@123"
-          echo "=================================================="
 
-      - name: Download and Extract Bore
+      - name: Setup SSL (Stunnel) on Port 443
         run: |
-          wget -q https://github.com/ekzhang/bore/releases/download/v0.5.0/bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
-          tar -xf bore-v0.5.0-x86_64-unknown-linux-musl.tar.gz
-          sudo mv bore /usr/local/bin/
+          sudo apt-get update -y
+          sudo apt-get install stunnel4 -y
+          sudo openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 -subj "/CN=VPS-SIFODZ" -keyout /etc/stunnel/stunnel.pem -out /etc/stunnel/stunnel.pem
+          echo "cert = /etc/stunnel/stunnel.pem" | sudo tee -a /etc/stunnel/stunnel.conf
+          echo "client = no" | sudo tee -a /etc/stunnel/stunnel.conf
+          echo "[ssh]" | sudo tee -a /etc/stunnel/stunnel.conf
+          echo "accept = 443" | sudo tee -a /etc/stunnel/stunnel.conf
+          echo "connect = 127.0.0.1:22" | sudo tee -a /etc/stunnel/stunnel.conf
+          sudo sed -i 's/ENABLED=0/ENABLED=1/' /etc/default/stunnel4
+          sudo service stunnel4 restart
 
-      - name: Start Bore Tunnel
+      - name: Setup WebSocket Proxy on Ports 80 & 8080
         run: |
+          cat << 'EOF' > /tmp/ws_proxy.py
+          import socket, threading
+          def handle(client):
+              try:
+                  req = client.recv(4096).decode('utf-8', errors='ignore')
+                  if "HTTP" in req:
+                      client.send(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+                  ssh = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                  ssh.connect(('127.0.0.1', 22))
+                  def fw(s, d):
+                      try:
+                          while True:
+                              b = s.recv(4096)
+                              if not b: break
+                              d.send(b)
+                      except: pass
+                      s.close(); d.close()
+                  threading.Thread(target=fw, args=(client, ssh)).start()
+                  threading.Thread(target=fw, args=(ssh, client)).start()
+              except:
+                  client.close()
+          def start_server(port):
+              server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+              server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+              server.bind(('0.0.0.0', port))
+              server.listen(100)
+              while True:
+                  c, addr = server.accept()
+                  threading.Thread(target=handle, args=(c,)).start()
+          threading.Thread(target=start_server, args=(80,)).start()
+          threading.Thread(target=start_server, args=(8080,)).start()
+          EOF
+          sudo nohup python3 /tmp/ws_proxy.py >/dev/null 2>&1 &
+
+      - name: Start Static VPN Tunnel (Localtunnel)
+        run: |
+          sudo apt-get install -y npm
+          sudo npm install -g localtunnel
+          
           echo "=================================================="
-          bore local 22 --to bore.pub
+          # استخدام النطاق الثابت الخاص بالسيرفر
+          lt --port 80 --subdomain vps-sifodz > /tmp/lt.log 2>&1 &
+          sleep 10
+          STATIC_DOMAIN="vps-sifodz.loca.lt"
+          
+          echo "Host (SNI/Payload): $STATIC_DOMAIN"
+          echo "=================================================="
+          
+          # إبقاء السيرفر يعمل بشكل مستمر
+          while true; do sleep 60; done
