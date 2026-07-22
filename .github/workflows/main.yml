@@ -29,8 +29,7 @@ jobs:
       - name: Start Bore Tunnel
         run: |
           Start-Process -FilePath "$pwd\bore.exe" -ArgumentList "local 3389 --to bore.pub --port 45596" -NoNewWindow -RedirectStandardOutput bore.log
-          Start-Sleep -Seconds 10
-          Get-Content bore.log -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 5
 
       - name: Output RDP Details
         run: |
@@ -46,6 +45,9 @@ jobs:
           Write-Output "2. Connect to: bore.pub:45596"
           Write-Output "3. Use credentials above"
           Write-Output "============================================"
+
+      - name: Keep Alive Runner
+        run: |
           while ($true) { Start-Sleep -Seconds 300 }
 
       - name: Cleanup Bore
