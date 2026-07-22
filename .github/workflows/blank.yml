@@ -1,0 +1,39 @@
+name: Linux VPS via Bore
+
+on: [push]
+
+jobs:
+  vps-setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360 # أقصى حد للتشغيل المستمر هو 6 ساعات
+
+    steps:
+      - name: Configure SSH and Root User
+        run: |
+          # تعيين كلمة مرور قوية للمستخدم root
+          echo "root:Root@123" | sudo chpasswd
+          
+          # إعداد السيرفر للسماح بدخول الـ root عبر كلمة المرور
+          echo "PermitRootLogin yes" | sudo tee -a /etc/ssh/sshd_config
+          echo "PasswordAuthentication yes" | sudo tee -a /etc/ssh/sshd_config
+          
+          # إعادة تشغيل خدمة الـ SSH لتطبيق التغييرات
+          sudo systemctl restart ssh
+
+      - name: Download and Extract Bore
+        run: |
+          # تحميل أداة Bore الخاصة بنظام لينكس
+          wget https://github.com/ekzhang/bore/releases/download/v0.5.1/bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
+          tar -xf bore-v0.5.1-x86_64-unknown-linux-musl.tar.gz
+          chmod +x bore
+
+      - name: Start Bore Tunnel
+        run: |
+          echo "===================================================="
+          echo "انتظر ثوانٍ ليظهر رقم المنفذ (Port) الخاص بـ SSH أدناه"
+          echo "اسم المستخدم: root"
+          echo "كلمة المرور: Root@123"
+          echo "===================================================="
+          
+          # تشغيل النفق وتوجيه منفذ الـ SSH الافتراضي (22)
+          ./bore local 22 --to bore.pub
