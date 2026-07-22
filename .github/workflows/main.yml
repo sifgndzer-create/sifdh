@@ -1,4 +1,4 @@
-name: Windows RDP via Bore
+name: Windows RDP via Pinggy
 
 on: [push]
 
@@ -7,50 +7,59 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 360 # GitHub Free max runtime is 6 hours
     steps:
-      - name: Download and extract Bore
-        run: |
-          $url = "https://github.com/ekzhang/bore/releases/download/v0.5.2/bore-v0.5.2-x86_64-pc-windows-msvc.zip"
-          Invoke-WebRequest -Uri $url -OutFile bore.zip
-          Expand-Archive bore.zip -DestinationPath "$env:USERPROFILE"
-          Remove-Item bore.zip
-          Copy-Item "$env:USERPROFILE\bore.exe" "$env:GITHUB_WORKSPACE"
-
       - name: Enable RDP and Firewall
         run: |
           Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
           Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
-          New-NetFirewallRule -DisplayName "Allow RDP via Bore" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389
+          New-NetFirewallRule -DisplayName "Allow RDP" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 3389
 
       - name: Create Admin User
         run: |
           net user kamel007 Kamel@123 /add
           net localgroup administrators kamel007 /add
 
-      - name: Start Bore Tunnel
+      - name: Start Pinggy TCP Tunnel
         run: |
-          Start-Process -FilePath "$pwd\bore.exe" -ArgumentList "local 3389 --to bore.pub --port 45596" -NoNewWindow -RedirectStandardOutput bore.log
-          Start-Sleep -Seconds 5
-
-      - name: Output RDP Details
-        run: |
-          Write-Output "============================================"
-          Write-Output "|| ✅ RDP CONNECTION DETAILS (Bore)        ||"
-          Write-Output "============================================"
-          Write-Output "Address: bore.pub:45596"
-          Write-Output "Username: kamel007"
-          Write-Output "Password: Kamel@123"
-          Write-Output "--------------------------------------------"
-          Write-Output "Instructions:"
-          Write-Output "1. Press Win + R, type 'mstsc' and hit Enter"
-          Write-Output "2. Connect to: bore.pub:45596"
-          Write-Output "3. Use credentials above"
-          Write-Output "============================================"
+          # تشغيل النفق عبر SSH المدمج في ويندوز
+          Start-Process -FilePath "ssh" -ArgumentList "-o StrictHostKeyChecking=no -p 443 -R 0:localhost:3389 a.pinggy.io" -NoNewWindow -RedirectStandardOutput pinggy.log
+          
+          # انتظار واستخراج رابط المنفذ الحقيقي
+          $tunnelUrl = $null
+          $timeout = 30
+          while ($timeout -gt 0 -and -not $tunnelUrl) {
+              Start-Sleep -Seconds 3
+              $timeout -= 3
+              $logContent = Get-Content pinggy.log -ErrorAction SilentlyContinue
+              $match = $logContent | Select-String -Pattern "tcp://([a-zA-Z0-9\.\-]+:\d+)"
+              if ($match) {
+                  $tunnelUrl = $match.Matches.Groups[1].Value
+              }
+          }
+          
+          if ($tunnelUrl) {
+              Write-Output "============================================"
+              Write-Output "|| ✅ RDP CONNECTION DETAILS (Pinggy)      ||"
+              Write-Output "============================================"
+              Write-Output "Address: $tunnelUrl"
+              Write-Output "Username: kamel007"
+              Write-Output "Password: Kamel@123"
+              Write-Output "--------------------------------------------"
+              Write-Output "Instructions:"
+              Write-Output "1. Press Win + R, type 'mstsc' and hit Enter"
+              Write-Output "2. Connect to: $tunnelUrl"
+              Write-Output "3. Use credentials above"
+              Write-Output "============================================"
+          } else {
+              Write-Output "::error::Failed to establish Pinggy tunnel. Log content:"
+              Get-Content pinggy.log
+              exit 1
+          }
 
       - name: Keep Alive Runner
         run: |
           while ($true) { Start-Sleep -Seconds 300 }
 
-      - name: Cleanup Bore
+      - name: Cleanup
         if: always()
         run: |
-          Stop-Process -Name "bore" -Force -ErrorAction SilentlyContinue
+          Stop-Process -Name "ssh" -Force -ErrorAction SilentlyContinue
